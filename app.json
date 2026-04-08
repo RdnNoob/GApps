@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "GeoNode",
+    "slug": "gapps",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "gapps",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.radenrdns.geonode"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.radenrdns.geonode",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Izinkan GeoNode mengakses lokasi untuk menampilkan posisimu di peta.",
+          "locationAlwaysPermission": "Izinkan GeoNode mengakses lokasi di latar belakang.",
+          "locationWhenInUsePermission": "Izinkan GeoNode mengakses lokasi saat aplikasi digunakan."
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5ec94f92-9e29-4462-bf06-bb5fa64a4988"
+      }
+    }
+  }
+}
