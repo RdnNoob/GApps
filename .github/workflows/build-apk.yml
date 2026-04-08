@@ -28,20 +28,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          cmdline-tools-version: '11076708'
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Expo Prebuild (generate android folder)
+      - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_DOTENV: 1
@@ -49,13 +44,13 @@ jobs:
       - name: Grant execute permission untuk Gradle
         run: chmod +x android/gradlew
 
-      - name: Build APK (debug)
+      - name: Build APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx3g -Dorg.gradle.daemon=false'
 
-      - name: Upload APK sebagai artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: GeoNode-APK
