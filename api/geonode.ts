@@ -1,4 +1,4 @@
-const BASE_URL = "https://geonode.gt.tc";
+const BASE_URL = "https://bf2cad55-3715-46d8-8c77-c714b7348acf-00-djvj0nekm9uw.janeway.replit.dev";
 
 let authToken: string | null = null;
 
