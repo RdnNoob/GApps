@@ -114,7 +114,7 @@ export default function ProfileScreen() {
               <Feather name="globe" size={16} color="#8b5cf6" />
             </View>
             <Text style={s.menuLabel}>Server</Text>
-            <Text style={s.menuValue}>geonode.gt.tc</Text>
+            <Text style={s.menuValue}>bf2cad55-3715-46d8-8c77-c714b7348acf-00-djvj0nekm9uw.janeway.replit.dev</Text>
           </View>
         </View>
       </View>
