@@ -40,3 +40,14 @@ Atau trigger manual: **Actions** → **Build Android APK** → **Run workflow**
 ```bash
 npm install
 npx expo start
+
+geonode-app/
+├── app/              # Halaman (Expo Router)
+│   ├── (tabs)/       # Tab utama (Peta, Teman, Grup, Profil)
+│   ├── chat/         # Halaman chat
+│   └── group/        # Halaman grup
+├── api/              # API client
+├── components/       # Komponen reusable
+├── context/          # Auth & Location context
+├── constants/        # Warna & tema
+└── hooks/            # Custom hooks
