@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { LocationProvider } from "@/context/LocationContext";
+import { checkMaintenance } from "@/api/geonode";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,7 +30,13 @@ function RootLayoutNav() {
       if (!user) {
         router.replace("/login");
       } else {
-        router.replace("/(tabs)");
+        checkMaintenance().then(({ maintenance }) => {
+          if (maintenance) {
+            router.replace("/maintenance");
+          } else {
+            router.replace("/(tabs)");
+          }
+        }).catch(() => router.replace("/(tabs)"));
       }
     }
   }, [user, loading]);
@@ -39,6 +46,9 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen name="register" options={{ headerShown: false, animation: "slide_from_right" }} />
+      <Stack.Screen name="admin-login" options={{ headerShown: false, animation: "slide_from_bottom" }} />
+      <Stack.Screen name="admin" options={{ headerShown: false, animation: "slide_from_bottom" }} />
+      <Stack.Screen name="maintenance" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen
         name="chat/[friendId]"
         options={{ headerShown: false, animation: "slide_from_right" }}
