@@ -105,6 +105,17 @@ export interface GroupMember {
   avatar_warna?: string;
 }
 
+export interface GroupMapMember {
+  user_id: number;
+  nama: string;
+  kode: string;
+  role: string;
+  avatar_warna?: string;
+  lat?: number;
+  lng?: number;
+  last_seen?: string;
+}
+
 export interface AdminStats {
   total_pengguna: number;
   pengguna_online: number;
@@ -228,8 +239,10 @@ export const addGroupMember = (group_id: number, kode: string) =>
     body: JSON.stringify({ kode }),
   });
 
+export const getGroupMap = (group_id: number) =>
+  request<GroupMapMember[]>(`/api/groups/${group_id}/maps`);
+
 export const getGroupMaps = (group_id: number) =>
-  request<Friend[]>(`/api/groups/${group_id}/maps`).catch(() => [] as Friend[]);
 
 export const deleteGroup = (group_id: number) =>
   request<{ message: string }>(`/api/groups/${group_id}`, { method: "DELETE" });

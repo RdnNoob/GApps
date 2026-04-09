@@ -18,19 +18,21 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  addGroupMember, getGroupMembers, getGroupMessages, sendGroupMessage,
-  deleteGroupMessage, kickMember, changeMemberRole, renameGroup, deleteGroup,
+  addGroupMember, getGroupMembers, getGroupMessages, sendGroupMessage, getGroupMap,
+  deleteGroupMessage, kickMember, changeMemberRole, renameGroup, deleteGroup, GroupMapMember,
   Message, GroupMember,
 } from "@/api/geonode";
 import { Avatar } from "@/components/Avatar";
 import { UserProfileModal } from "@/components/UserProfileModal";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function GroupScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { groupId, nama } = useLocalSearchParams<{ groupId: string; nama: string }>();
   const gid = Number(groupId);
   const [groupNama, setGroupNama] = useState(decodeURIComponent(nama ?? "Grup"));
@@ -212,6 +214,9 @@ export default function GroupScreen() {
           <Text style={s.headerName}>{groupNama}</Text>
           <Text style={s.headerSub}>{members.length} anggota</Text>
         </View>
+        <Pressable style={s.settingsBtn} onPress={() => router.push(`/group/map/${gid}?nama=${encodeURIComponent(groupNama)}`)}>  
+          <Feather name="map-pin" size={20} color={colors.primary} />
+        </Pressable>
         <Pressable style={s.settingsBtn} onPress={() => setShowSettings(true)}>
           <Feather name="settings" size={20} color={colors.mutedForeground} />
         </Pressable>

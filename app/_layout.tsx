@@ -15,6 +15,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { LanguageProvider } from "@/context/LanguageContext";
 import { LocationProvider } from "@/context/LocationContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { checkMaintenance } from "@/api/geonode";
@@ -84,6 +85,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
+              <LanguageProvider>
               <AuthProvider>
                 <NotificationProvider>
                   <LocationProvider>
@@ -91,6 +93,7 @@ export default function RootLayout() {
                   </LocationProvider>
                 </NotificationProvider>
               </AuthProvider>
+              </LanguageProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>

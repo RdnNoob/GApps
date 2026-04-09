@@ -19,6 +19,7 @@ import { Avatar } from "@/components/Avatar";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { updateProfile } from "@/api/geonode";
+import { useLanguage, LANGUAGES } from "@/context/LanguageContext";
 
 const AVATAR_COLORS = [
   "#6366f1","#ec4899","#f59e0b","#14b8a6","#8b5cf6",
@@ -36,6 +37,8 @@ export default function ProfileScreen() {
   const [editNama, setEditNama] = useState(user?.nama ?? "");
   const [editColor, setEditColor] = useState(user?.avatar_warna ?? AVATAR_COLORS[0]);
   const [saving, setSaving] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
+  const [showLangModal, setShowLangModal] = useState(false);
 
   const copyKode = async () => {
     if (!user?.kode) return;
@@ -146,7 +149,25 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* About */}
+
+        {/* Bahasa */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>{t.language.toUpperCase()}</Text>
+          <View style={s.menuCard}>
+            <Pressable style={s.menuItem} onPress={() => setShowLangModal(true)}>
+              <View style={[s.menuIcon, { backgroundColor: "#8b5cf620" }]}>
+                <Feather name="globe" size={16} color="#8b5cf6" />
+              </View>
+              <Text style={s.menuLabel}>{t.language}</Text>
+              <Text style={s.menuValue}>
+                {LANGUAGES.find(l => l.code === language)?.flag + " " + LANGUAGES.find(l => l.code === language)?.label}
+              </Text>
+              <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* About */}}
         <View style={s.section}>
           <Text style={s.sectionTitle}>TENTANG</Text>
           <View style={s.menuCard}>
@@ -163,9 +184,36 @@ export default function ProfileScreen() {
         {/* Logout */}
         <Pressable style={({ pressed }) => [s.logoutBtn, pressed && { opacity: 0.7 }]} onPress={handleLogout}>
           <Feather name="log-out" size={18} color="#ef4444" />
-          <Text style={s.logoutText}>Keluar</Text>
+          <Text style={s.logoutText}>{t.logout}</Text>
         </Pressable>
       </ScrollView>
+
+
+      {/* Modal Pilih Bahasa */}
+      <Modal visible={showLangModal} animationType="slide" transparent onRequestClose={() => setShowLangModal(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowLangModal(false)}>
+          <View style={s.modalCard}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>{t.chooseLanguage}</Text>
+            {LANGUAGES.map((lang) => (
+              <Pressable
+                key={lang.code}
+                style={[s.menuItem, { paddingHorizontal: 0, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                onPress={() => { setLanguage(lang.code); setShowLangModal(false); }}
+              >
+                <Text style={{ fontSize: 24 }}>{lang.flag}</Text>
+                <Text style={[s.menuLabel, { fontSize: 16, marginLeft: 8 }]}>{lang.label}</Text>
+                {language === lang.code && (
+                  <Feather name="check" size={18} color={colors.primary} />
+                )}
+              </Pressable>
+            ))}
+            <Pressable style={[s.cancelBtn, { marginBottom: 20 }]} onPress={() => setShowLangModal(false)}>
+              <Text style={s.cancelBtnText}>{t.cancel}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Modal Edit Profil */}
       <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => setEditVisible(false)}>
