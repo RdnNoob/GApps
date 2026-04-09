@@ -1,4 +1,4 @@
-const BASE_URL = "https://e90a07b6-80e6-421b-ad30-bd9be0e83063-00-12mwyabnxpapn.worf.replit.dev";
+const BASE_URL = "https://g-apps-builder--chaawzta.replit.app";
 
 let authToken: string | null = null;
 
