@@ -61,11 +61,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "5ec94f92-9e29-4462-bf06-bb5fa64a4988"
-      }
-    }
+"extra": {
+  "router": {
+    "origin": "https://gapps-production.up.railway.app"
+  },
+  "eas": {
+    "projectId": "5ec94f92-9e29-4462-bf06-bb5fa64a4988"
+  }
+}
   }
 }
