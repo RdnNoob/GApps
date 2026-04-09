@@ -1,4 +1,4 @@
-const BASE_URL = "https://64603bda-b524-4a7e-9189-ea08310e090b-00-3wdltmzsle45.spock.replit.dev";
+const BASE_URL = "https://g-apps--adestores02.replit.app";
 
 let authToken: string | null = null;
 
