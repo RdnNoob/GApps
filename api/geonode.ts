@@ -32,6 +32,24 @@ async function request<T>(
   return res.json();
 }
 
+async function adminRequest<T>(
+  path: string,
+  adminToken: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${adminToken}`,
+    ...(options.headers as Record<string, string>),
+  };
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export interface User {
   id: number;
   nama: string;
@@ -87,6 +105,36 @@ export interface GroupMember {
   avatar_warna?: string;
 }
 
+export interface AdminStats {
+  total_pengguna: number;
+  pengguna_online: number;
+  total_pertemanan: number;
+  total_pesan: number;
+  pendaftaran_hari_ini: number;
+  recent_users: AdminUser[];
+  recent_logs: ActivityLog[];
+}
+
+export interface AdminUser {
+  id: number;
+  nama: string;
+  email: string;
+  kode: string;
+  avatar_warna?: string;
+  is_online?: boolean;
+  last_seen?: string;
+  created_at: string;
+}
+
+export interface ActivityLog {
+  id: number;
+  user_id: number;
+  aksi: string;
+  detail?: string;
+  nama?: string;
+  created_at: string;
+}
+
 // Auth
 export const login = (kode_atau_email: string, password: string) =>
   request<{ token: string; user: User }>("/api/auth/login", {
@@ -104,6 +152,12 @@ export const getMe = () => request<User>("/api/auth/me");
 
 export const logout = () =>
   request<{ message: string }>("/api/auth/logout", { method: "POST" });
+
+// Maintenance
+export const checkMaintenance = () =>
+  fetch(`${BASE_URL}/api/admin/check-maintenance`)
+    .then(r => r.json())
+    .catch(() => ({ maintenance: false }));
 
 // Friends
 export const getFriends = () => request<Friend[]>("/api/friends");
@@ -185,3 +239,45 @@ export const pollEvents = (since: string, friend_id?: number, group_id?: number)
   return request<{ events: unknown[] }>(url).catch(() => ({ events: [] }));
 };
 
+// Keys (E2E encryption)
+export const savePublicKey = (public_key: string) =>
+  request<{ message: string }>("/api/keys/save", {
+    method: "POST",
+    body: JSON.stringify({ public_key }),
+  });
+
+export const getPublicKey = (userId: number) =>
+  request<{ public_key: string }>(`/api/keys/${userId}`);
+
+// Admin
+export const adminLogin = (username: string, kata_sandi: string) =>
+  fetch(`${BASE_URL}/api/admin/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, kata_sandi }),
+  }).then(r => {
+    if (!r.ok) return r.json().then(d => Promise.reject(new Error(d.error || "Login gagal")));
+    return r.json() as Promise<{ token: string; username: string }>;
+  });
+
+export const adminGetStats = (adminToken: string) =>
+  adminRequest<AdminStats>("/api/admin/stats", adminToken);
+
+export const adminGetUsers = (adminToken: string) =>
+  adminRequest<AdminUser[]>("/api/admin/users", adminToken);
+
+export const adminToggleMaintenance = (adminToken: string, aktif: boolean) =>
+  adminRequest<{ maintenance: boolean; message: string }>("/api/admin/maintenance", adminToken, {
+    method: "POST",
+    body: JSON.stringify({ aktif }),
+  });
+
+export const adminForceLogout = (adminToken: string, userId: number) =>
+  adminRequest<{ message: string }>(`/api/admin/force-logout/${userId}`, adminToken, {
+    method: "POST",
+  });
+
+export const adminDeleteUser = (adminToken: string, userId: number) =>
+  adminRequest<{ message: string }>(`/api/admin/users/${userId}`, adminToken, {
+    method: "DELETE",
+  });
