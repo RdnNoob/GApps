@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { createGroup, getGroups, Group } from "@/api/geonode";
+import { createGroup, getGroups, deleteGroup, Group } from "@/api/geonode";
 import { useColors } from "@/hooks/useColors";
 
 const GROUP_COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#14b8a6", "#8b5cf6", "#ef4444"];
@@ -56,6 +56,43 @@ export default function GroupsScreen() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleLongPress = (item: Group, index: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const isAdmin = item.role === "admin";
+    const options: any[] = [
+      {
+        text: "Buka Grup",
+        onPress: () => router.push(`/group/${item.id}?nama=${encodeURIComponent(item.nama)}`),
+      },
+    ];
+    if (isAdmin) {
+      options.push({
+        text: "Hapus Grup",
+        style: "destructive",
+        onPress: () => {
+          Alert.alert("Hapus Grup", `Hapus grup "${item.nama}"? Semua pesan akan hilang.`, [
+            { text: "Batal", style: "cancel" },
+            {
+              text: "Hapus",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  await deleteGroup(item.id);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setGroups((prev) => prev.filter((g) => g.id !== item.id));
+                } catch {
+                  Alert.alert("Gagal", "Tidak bisa menghapus grup");
+                }
+              },
+            },
+          ]);
+        },
+      });
+    }
+    options.push({ text: "Batal", style: "cancel" });
+    Alert.alert(item.nama, `${item.member_count} anggota · ${item.role}`, options);
   };
 
   const s = styles(colors);
@@ -102,6 +139,8 @@ export default function GroupsScreen() {
           <Pressable
             style={s.card}
             onPress={() => router.push(`/group/${item.id}?nama=${encodeURIComponent(item.nama)}`)}
+            onLongPress={() => handleLongPress(item, index)}
+            delayLongPress={350}
           >
             <View style={[s.groupIcon, { backgroundColor: GROUP_COLORS[index % GROUP_COLORS.length] + "33" }]}>
               <Feather name="users" size={22} color={GROUP_COLORS[index % GROUP_COLORS.length]} />
@@ -110,6 +149,11 @@ export default function GroupsScreen() {
               <Text style={s.cardName}>{item.nama}</Text>
               <Text style={s.cardSub}>{item.member_count} anggota · {item.role}</Text>
             </View>
+            {item.role === "admin" && (
+              <View style={s.adminBadge}>
+                <Text style={s.adminText}>Admin</Text>
+              </View>
+            )}
             <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
           </Pressable>
         )}
@@ -144,6 +188,8 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     groupIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
     cardName: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.foreground },
     cardSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 },
+    adminBadge: { backgroundColor: "#6366f120", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginRight: 4 },
+    adminText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: "#6366f1" },
     empty: { alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 12 },
     emptyText: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: colors.foreground },
     emptySub: { fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, textAlign: "center", paddingHorizontal: 40 },

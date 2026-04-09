@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -13,8 +14,9 @@ import {
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getChatMessages, sendMessage, Message } from "@/api/geonode";
+import { getChatMessages, sendMessage, deleteMessage, Message } from "@/api/geonode";
 import { Avatar } from "@/components/Avatar";
+import { UserProfileModal } from "@/components/UserProfileModal";
 import { useColors } from "@/hooks/useColors";
 
 export default function ChatScreen() {
@@ -22,10 +24,12 @@ export default function ChatScreen() {
   const insets = useSafeAreaInsets();
   const { friendId, nama } = useLocalSearchParams<{ friendId: string; nama: string }>();
   const fid = Number(friendId);
+  const namaDisplay = decodeURIComponent(nama ?? "Teman");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -59,41 +63,63 @@ export default function ChatScreen() {
     }
   };
 
+  const handleLongPressMessage = (item: Message) => {
+    if (!item.is_mine) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert("Hapus Pesan", "Hapus pesan ini?", [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Hapus",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteMessage(item.id);
+            setMessages((prev) => prev.filter((m) => m.id !== item.id));
+          } catch {
+            Alert.alert("Gagal", "Tidak bisa menghapus pesan");
+          }
+        },
+      },
+    ]);
+  };
+
   const s = styles(colors);
-  const namaDisplay = decodeURIComponent(nama ?? "Teman");
 
   return (
     <KeyboardAvoidingView style={s.container} behavior="padding" keyboardVerticalOffset={0}>
-      {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 12 }]}>
         <Pressable style={s.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </Pressable>
-        <Avatar name={namaDisplay} size={36} />
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerName}>{namaDisplay}</Text>
-          <Text style={s.headerSub}>Pesan langsung</Text>
-        </View>
+        <Pressable style={s.headerProfile} onPress={() => setShowProfile(true)}>
+          <Avatar name={namaDisplay} size={36} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerName}>{namaDisplay}</Text>
+            <Text style={s.headerSub}>Ketuk untuk lihat profil</Text>
+          </View>
+        </Pressable>
       </View>
 
       {loading ? (
-        <View style={s.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <View style={s.center}><ActivityIndicator color={colors.primary} /></View>
       ) : (
         <FlatList
           data={messages}
           keyExtractor={(m) => String(m.id)}
           inverted
           renderItem={({ item }) => (
-            <View style={[s.bubbleWrap, item.is_mine && s.bubbleWrapMine]}>
+            <Pressable
+              style={[s.bubbleWrap, item.is_mine && s.bubbleWrapMine]}
+              onLongPress={() => handleLongPressMessage(item)}
+              delayLongPress={350}
+            >
               <View style={[s.bubble, item.is_mine ? s.bubbleMine : s.bubbleThem]}>
                 <Text style={[s.bubbleText, item.is_mine && s.bubbleTextMine]}>{item.content}</Text>
                 <Text style={[s.bubbleTime, item.is_mine && s.bubbleTimeMine]}>
                   {new Date(item.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
                 </Text>
               </View>
-            </View>
+            </Pressable>
           )}
           ListEmptyComponent={
             <View style={s.emptyCenter}>
@@ -106,7 +132,6 @@ export default function ChatScreen() {
         />
       )}
 
-      {/* Input */}
       <View style={[s.inputRow, { paddingBottom: insets.bottom + 8 }]}>
         <TextInput
           style={s.input}
@@ -125,6 +150,8 @@ export default function ChatScreen() {
           {sending ? <ActivityIndicator color={colors.primaryForeground} size="small" /> : <Feather name="send" size={18} color={colors.primaryForeground} />}
         </Pressable>
       </View>
+
+      <UserProfileModal userId={fid} visible={showProfile} onClose={() => setShowProfile(false)} />
     </KeyboardAvoidingView>
   );
 }
@@ -134,8 +161,9 @@ const styles = (colors: ReturnType<typeof useColors>) =>
     container: { flex: 1, backgroundColor: colors.background },
     header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
     backBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+    headerProfile: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
     headerName: { fontSize: 16, fontFamily: "Inter_600SemiBold", color: colors.foreground },
-    headerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
+    headerSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground },
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
     emptyCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingTop: 60 },
     emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: colors.mutedForeground },

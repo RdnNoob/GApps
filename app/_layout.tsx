@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { LocationProvider } from "@/context/LocationContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import { checkMaintenance } from "@/api/geonode";
 
 SplashScreen.preventAutoHideAsync();
@@ -84,9 +85,11 @@ export default function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <AuthProvider>
-                <LocationProvider>
-                  <RootLayoutNav />
-                </LocationProvider>
+                <NotificationProvider>
+                  <LocationProvider>
+                    <RootLayoutNav />
+                  </LocationProvider>
+                </NotificationProvider>
               </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

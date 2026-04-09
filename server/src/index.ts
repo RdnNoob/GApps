@@ -102,6 +102,13 @@ async function initDB() {
       kata_sandi TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS push_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, token)
+    );
   `);
 
   // Insert default settings
@@ -147,6 +154,25 @@ async function logActivity(userId: number | null, aksi: string, detail?: string)
       [userId, aksi, detail || null]
     );
   } catch {}
+}
+
+async function sendPush(toUserId: number, title: string, body: string, data?: Record<string, any>) {
+  try {
+    const r = await pool.query("SELECT token FROM push_tokens WHERE user_id=$1", [toUserId]);
+    if (r.rows.length === 0) return;
+    const messages = r.rows.map((row: any) => ({
+      to: row.token,
+      sound: "default",
+      title,
+      body,
+      data: data || {},
+    }));
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(messages),
+    });
+  } catch (e) { console.error("Push error:", e); }
 }
 
 function auth(req: any, res: any, next: any) {
@@ -254,6 +280,8 @@ app.post("/api/friends", auth, async (req: any, res) => {
     if (exr.rows.length > 0) { res.status(400).json({ error: "Permintaan sudah ada" }); return; }
     await pool.query("INSERT INTO friend_requests(dari_id,ke_id) VALUES($1,$2)", [req.userId, tid]);
     await logActivity(req.userId, "friend_request", `Permintaan pertemanan ke ${t.rows[0].nama}`);
+    const pengirim = await pool.query("SELECT nama FROM users WHERE id=$1", [req.userId]);
+    sendPush(tid, "Permintaan Teman Baru 👋", `${pengirim.rows[0]?.nama} ingin berteman denganmu`, { type: "friend_request" });
     res.json({ message: "Permintaan terkirim" });
   } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
 });
@@ -283,6 +311,8 @@ app.post("/api/friends/requests/:id/accept", auth, async (req: any, res) => {
       [req.userId, fr.dari_id, fr.dari_id, req.userId]
     );
     await logActivity(req.userId, "friend_accept", `Menerima permintaan pertemanan`);
+    const penerima = await pool.query("SELECT nama FROM users WHERE id=$1", [req.userId]);
+    sendPush(fr.dari_id, "Permintaan Diterima ✅", `${penerima.rows[0]?.nama} menerima permintaan temanmu`, { type: "friend_accept" });
     res.json({ message: "Diterima" });
   } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
 });
@@ -357,6 +387,8 @@ app.post("/api/chat/messages", auth, async (req: any, res) => {
       [req.userId, friend_id, content]
     );
     res.json({ ...r.rows[0], is_mine: true });
+    const pengirim = await pool.query("SELECT nama FROM users WHERE id=$1", [req.userId]);
+    sendPush(friend_id, `💬 ${pengirim.rows[0]?.nama}`, content.length > 80 ? content.slice(0, 80) + "..." : content, { type: "message", friendId: req.userId });
   } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -417,6 +449,15 @@ app.post("/api/groups/:id/messages", auth, async (req: any, res) => {
       [gid, req.userId, content]
     );
     res.json({ ...r.rows[0], is_mine: true });
+    // Kirim push ke semua anggota kecuali pengirim
+    const pengirim = await pool.query("SELECT nama FROM users WHERE id=$1", [req.userId]);
+    const grup = await pool.query("SELECT nama FROM groups WHERE id=$1", [gid]);
+    const anggota = await pool.query(
+      "SELECT user_id FROM group_members WHERE group_id=$1 AND user_id!=$2", [gid, req.userId]
+    );
+    for (const m of anggota.rows) {
+      sendPush(m.user_id, `👥 ${grup.rows[0]?.nama}`, `${pengirim.rows[0]?.nama}: ${content.length > 70 ? content.slice(0,70)+"..." : content}`, { type: "group_message", groupId: gid });
+    }
   } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -465,6 +506,123 @@ app.get("/api/groups/:id/maps", auth, async (req: any, res) => {
       [gid]
     );
     res.json(r.rows);
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+// ── Delete routes ────────────────────────────────────────────────────────────
+app.delete("/api/chat/messages/:id", auth, async (req: any, res) => {
+  try {
+    const mid = Number(req.params.id);
+    const r = await pool.query("SELECT id FROM messages WHERE id=$1 AND from_id=$2", [mid, req.userId]);
+    if (r.rows.length === 0) { res.status(403).json({ error: "Tidak bisa hapus pesan ini" }); return; }
+    await pool.query("DELETE FROM messages WHERE id=$1", [mid]);
+    res.json({ message: "Pesan dihapus" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.delete("/api/groups/:id/messages/:msgId", auth, async (req: any, res) => {
+  try {
+    const gid = Number(req.params.id);
+    const mid = Number(req.params.msgId);
+    // Bisa hapus jika: pengirim atau admin grup
+    const adminCheck = await pool.query(
+      "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", [gid, req.userId]
+    );
+    if (adminCheck.rows.length === 0) { res.status(403).json({ error: "Bukan anggota" }); return; }
+    const isAdmin = adminCheck.rows[0].role === "admin";
+    const msgCheck = await pool.query("SELECT id FROM group_messages WHERE id=$1 AND (from_id=$2 OR $3)", [mid, req.userId, isAdmin]);
+    if (msgCheck.rows.length === 0) { res.status(403).json({ error: "Tidak bisa hapus pesan ini" }); return; }
+    await pool.query("DELETE FROM group_messages WHERE id=$1", [mid]);
+    res.json({ message: "Pesan dihapus" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.delete("/api/groups/:id", auth, async (req: any, res) => {
+  try {
+    const gid = Number(req.params.id);
+    const adminCheck = await pool.query(
+      "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", [gid, req.userId]
+    );
+    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "admin") {
+      res.status(403).json({ error: "Hanya admin yang bisa menghapus grup" }); return;
+    }
+    await pool.query("DELETE FROM groups WHERE id=$1", [gid]);
+    res.json({ message: "Grup dihapus" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.patch("/api/groups/:id", auth, async (req: any, res) => {
+  try {
+    const gid = Number(req.params.id);
+    const { nama } = req.body;
+    if (!nama?.trim()) { res.status(400).json({ error: "Nama wajib diisi" }); return; }
+    const adminCheck = await pool.query(
+      "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", [gid, req.userId]
+    );
+    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "admin") {
+      res.status(403).json({ error: "Hanya admin yang bisa mengubah nama grup" }); return;
+    }
+    await pool.query("UPDATE groups SET nama=$1 WHERE id=$2", [nama.trim(), gid]);
+    res.json({ message: "Nama grup diperbarui" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.delete("/api/groups/:id/members/:userId", auth, async (req: any, res) => {
+  try {
+    const gid = Number(req.params.id);
+    const targetId = Number(req.params.userId);
+    const adminCheck = await pool.query(
+      "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", [gid, req.userId]
+    );
+    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "admin") {
+      res.status(403).json({ error: "Hanya admin yang bisa mengeluarkan anggota" }); return;
+    }
+    if (targetId === req.userId) { res.status(400).json({ error: "Tidak bisa mengeluarkan diri sendiri" }); return; }
+    await pool.query("DELETE FROM group_members WHERE group_id=$1 AND user_id=$2", [gid, targetId]);
+    res.json({ message: "Anggota dikeluarkan" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.patch("/api/groups/:id/members/:userId", auth, async (req: any, res) => {
+  try {
+    const gid = Number(req.params.id);
+    const targetId = Number(req.params.userId);
+    const { role } = req.body;
+    if (!["admin","member"].includes(role)) { res.status(400).json({ error: "Role tidak valid" }); return; }
+    const adminCheck = await pool.query(
+      "SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2", [gid, req.userId]
+    );
+    if (adminCheck.rows.length === 0 || adminCheck.rows[0].role !== "admin") {
+      res.status(403).json({ error: "Hanya admin yang bisa mengubah role" }); return;
+    }
+    await pool.query("UPDATE group_members SET role=$1 WHERE group_id=$2 AND user_id=$3", [role, gid, targetId]);
+    res.json({ message: "Role diperbarui" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+// ── Notifications (Push Token) ────────────────────────────────────────────────
+app.post("/api/notifications/token", auth, async (req: any, res) => {
+  try {
+    const { token: pushToken } = req.body;
+    if (!pushToken) { res.status(400).json({ error: "token wajib diisi" }); return; }
+    await pool.query(
+      `INSERT INTO push_tokens(user_id,token,updated_at) VALUES($1,$2,NOW())
+       ON CONFLICT(user_id,token) DO UPDATE SET updated_at=NOW()`,
+      [req.userId, pushToken]
+    );
+    res.json({ message: "Token tersimpan" });
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.delete("/api/notifications/token", auth, async (req: any, res) => {
+  try {
+    const { token: pushToken } = req.body;
+    if (pushToken) {
+      await pool.query("DELETE FROM push_tokens WHERE user_id=$1 AND token=$2", [req.userId, pushToken]);
+    } else {
+      await pool.query("DELETE FROM push_tokens WHERE user_id=$1", [req.userId]);
+    }
+    res.json({ message: "Token dihapus" });
   } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
 });
 

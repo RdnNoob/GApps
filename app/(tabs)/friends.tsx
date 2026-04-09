@@ -15,8 +15,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { addFriend, acceptFriend, rejectFriend, getFriends, getFriendRequests, Friend, FriendRequest } from "@/api/geonode";
+import { addFriend, acceptFriend, rejectFriend, getFriends, getFriendRequests, deleteFriend, Friend, FriendRequest, User } from "@/api/geonode";
 import { Avatar } from "@/components/Avatar";
+import { UserProfileModal } from "@/components/UserProfileModal";
 import { useColors } from "@/hooks/useColors";
 
 export default function FriendsScreen() {
@@ -29,6 +30,7 @@ export default function FriendsScreen() {
   const [addCode, setAddCode] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -76,11 +78,50 @@ export default function FriendsScreen() {
     } catch {}
   };
 
+  const handleDeleteFriend = (friend: Friend) => {
+    Alert.alert(
+      "Hapus Teman",
+      `Hapus ${friend.nama} dari daftar teman?`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteFriend(friend.id);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setFriends((prev) => prev.filter((f) => f.id !== friend.id));
+            } catch {
+              Alert.alert("Gagal", "Tidak bisa menghapus teman");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleFriendLongPress = (friend: Friend) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(friend.nama, undefined, [
+      { text: "Lihat Profil", onPress: () => setProfileUserId(friend.id) },
+      { text: "Kirim Pesan", onPress: () => router.push(`/chat/${friend.id}?nama=${encodeURIComponent(friend.nama)}`) },
+      { text: "Hapus Teman", style: "destructive", onPress: () => handleDeleteFriend(friend) },
+      { text: "Batal", style: "cancel" },
+    ]);
+  };
+
   const s = styles(colors);
 
   const renderFriend = ({ item }: { item: Friend }) => (
-    <Pressable style={s.card} onPress={() => router.push(`/chat/${item.id}?nama=${encodeURIComponent(item.nama)}`)}>
-      <Avatar name={item.nama} color={item.avatar_warna} size={46} online={item.online} />
+    <Pressable
+      style={s.card}
+      onPress={() => router.push(`/chat/${item.id}?nama=${encodeURIComponent(item.nama)}`)}
+      onLongPress={() => handleFriendLongPress(item)}
+    >
+      <Pressable onPress={() => setProfileUserId(item.id)}>
+        <Avatar name={item.nama} color={item.avatar_warna} size={46} online={item.online} />
+      </Pressable>
       <View style={{ flex: 1 }}>
         <Text style={s.cardName}>{item.nama}</Text>
         <Text style={s.cardSub}>{item.kode} · {item.online ? "Online" : "Offline"}</Text>
@@ -168,6 +209,13 @@ export default function FriendsScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
         scrollEnabled={friends.length > 0 || requests.length > 0}
+      />
+
+      <UserProfileModal
+        userId={profileUserId}
+        visible={profileUserId !== null}
+        onClose={() => setProfileUserId(null)}
+        onChat={(user) => router.push(`/chat/${user.id}?nama=${encodeURIComponent(user.nama)}`)}
       />
     </View>
   );

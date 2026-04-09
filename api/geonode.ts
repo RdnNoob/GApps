@@ -231,6 +231,45 @@ export const addGroupMember = (group_id: number, kode: string) =>
 export const getGroupMaps = (group_id: number) =>
   request<Friend[]>(`/api/groups/${group_id}/maps`).catch(() => [] as Friend[]);
 
+export const deleteGroup = (group_id: number) =>
+  request<{ message: string }>(`/api/groups/${group_id}`, { method: "DELETE" });
+
+export const renameGroup = (group_id: number, nama: string) =>
+  request<{ message: string }>(`/api/groups/${group_id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ nama }),
+  });
+
+export const kickMember = (group_id: number, userId: number) =>
+  request<{ message: string }>(`/api/groups/${group_id}/members/${userId}`, { method: "DELETE" });
+
+export const changeMemberRole = (group_id: number, userId: number, role: "admin" | "member") =>
+  request<{ message: string }>(`/api/groups/${group_id}/members/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+
+export const deleteMessage = (messageId: number) =>
+  request<{ message: string }>(`/api/chat/messages/${messageId}`, { method: "DELETE" });
+
+export const deleteGroupMessage = (group_id: number, messageId: number) =>
+  request<{ message: string }>(`/api/groups/${group_id}/messages/${messageId}`, { method: "DELETE" });
+
+export const deleteFriend = (friendId: number) =>
+  request<{ message: string }>(`/api/friends/${friendId}`, { method: "DELETE" });
+
+export const savePushToken = (token: string) =>
+  request<{ message: string }>("/api/notifications/token", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+
+export const deletePushToken = (token: string) =>
+  request<{ message: string }>("/api/notifications/token", {
+    method: "DELETE",
+    body: JSON.stringify({ token }),
+  });
+
 // User profile
 export const getUserById = (userId: number) =>
   request<User & { is_online?: boolean; last_seen?: string }>(`/api/users/${userId}`);
