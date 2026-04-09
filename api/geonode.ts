@@ -242,8 +242,6 @@ export const addGroupMember = (group_id: number, kode: string) =>
 export const getGroupMap = (group_id: number) =>
   request<GroupMapMember[]>(`/api/groups/${group_id}/maps`);
 
-export const getGroupMaps = (group_id: number) =>
-
 export const deleteGroup = (group_id: number) =>
   request<{ message: string }>(`/api/groups/${group_id}`, { method: "DELETE" });
 
