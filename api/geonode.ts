@@ -1,4 +1,4 @@
-const BASE_URL = "https://g-apps--adestores02.replit.app";
+const BASE_URL = "https://gapps-backend.up.railway.app";
 
 let authToken: string | null = null;
 
