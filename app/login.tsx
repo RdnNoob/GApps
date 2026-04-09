@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,6 +25,8 @@ export default function LoginScreen() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const tapCount = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLogin = async () => {
     if (!kode.trim() || !password) {
@@ -46,6 +48,18 @@ export default function LoginScreen() {
     }
   };
 
+  const handleLogoTap = () => {
+    tapCount.current += 1;
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    if (tapCount.current >= 2) {
+      tapCount.current = 0;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      router.push("/admin-login");
+      return;
+    }
+    tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 500);
+  };
+
   const s = styles(colors);
 
   return (
@@ -54,10 +68,12 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={s.inner}>
-        <View style={s.logoRow}>
-          <View style={s.logoDot} />
-          <Text style={s.logoText}>GeoNode</Text>
-        </View>
+        <Pressable onPress={handleLogoTap}>
+          <View style={s.logoRow}>
+            <View style={s.logoDot} />
+            <Text style={s.logoText}>GeoNode</Text>
+          </View>
+        </Pressable>
         <Text style={s.title}>Selamat Datang</Text>
         <Text style={s.subtitle}>Masuk untuk melacak teman di petamu</Text>
 
