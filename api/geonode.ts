@@ -1,4 +1,4 @@
-const BASE_URL = "https://mari-selesai--chastabil.replit.app";
+const BASE_URL = "https://e90a07b6-80e6-421b-ad30-bd9be0e83063-00-12mwyabnxpapn.worf.replit.dev";
 
 let authToken: string | null = null;
 
