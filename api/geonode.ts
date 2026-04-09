@@ -1,4 +1,4 @@
-const BASE_URL = "https://bf2cad55-3715-46d8-8c77-c714b7348acf-00-djvj0nekm9uw.janeway.replit.dev";
+const BASE_URL = "https://mari-selesai--chastabil.replit.app";
 
 let authToken: string | null = null;
 
@@ -184,3 +184,4 @@ export const pollEvents = (since: string, friend_id?: number, group_id?: number)
   if (group_id) url += `&group_id=${group_id}`;
   return request<{ events: unknown[] }>(url).catch(() => ({ events: [] }));
 };
+
