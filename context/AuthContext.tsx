@@ -9,6 +9,7 @@ interface AuthContextType {
   login: (kode: string, password: string) => Promise<void>;
   register: (nama: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  setUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -64,8 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem("gl_user");
   };
 
+  const handleSetUser = (updated: User) => {
+    setUser(updated);
+    AsyncStorage.setItem("gl_user", JSON.stringify(updated)).catch(() => {});
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, setUser: handleSetUser }}>
       {children}
     </AuthContext.Provider>
   );

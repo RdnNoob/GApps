@@ -491,48 +491,119 @@ app.get("/api/keys/:userId", auth, async (req: any, res) => {
   } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
 });
 
+// ── Users ─────────────────────────────────────────────────────────────────────
+app.get("/api/users/:id", auth, async (req: any, res) => {
+  try {
+    const uid = Number(req.params.id);
+    const r = await pool.query(
+      "SELECT id,nama,email,kode,avatar_warna,is_online,last_seen,created_at FROM users WHERE id=$1",
+      [uid]
+    );
+    if (r.rows.length === 0) { res.status(404).json({ error: "Pengguna tidak ditemukan" }); return; }
+    res.json(r.rows[0]);
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
+app.patch("/api/auth/update", auth, async (req: any, res) => {
+  try {
+    const { nama, avatar_warna } = req.body;
+    if (!nama?.trim()) { res.status(400).json({ error: "Nama tidak boleh kosong" }); return; }
+    const r = await pool.query(
+      "UPDATE users SET nama=$1,avatar_warna=COALESCE($2,avatar_warna) WHERE id=$3 RETURNING id,nama,email,kode,avatar_warna",
+      [nama.trim(), avatar_warna || null, req.userId]
+    );
+    await logActivity(req.userId, "update_profile", `Perbarui profil: ${nama}`);
+    res.json(r.rows[0]);
+  } catch(e:any) { console.error(e); res.status(500).json({ error: "Server error" }); }
+});
+
 // ── Polling / Events ──────────────────────────────────────────────────────────
 app.get("/api/ws", auth, async (req: any, res) => {
   try {
-    const since = req.query.since as string;
+    const since = req.query.since as string || new Date(Date.now() - 10000).toISOString();
     const friend_id = req.query.friend_id ? Number(req.query.friend_id) : null;
     const group_id = req.query.group_id ? Number(req.query.group_id) : null;
     const events: any[] = [];
 
-    if (since) {
-      if (friend_id) {
+    // Update online status
+    await pool.query("UPDATE users SET is_online=true,last_seen=NOW() WHERE id=$1", [req.userId]);
+
+    // Pesan baru dari teman aktif
+    if (friend_id) {
+      const r = await pool.query(
+        `SELECT id,content,from_id,to_id,created_at FROM messages
+         WHERE ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1)) AND created_at > $3
+         ORDER BY created_at ASC LIMIT 50`,
+        [req.userId, friend_id, since]
+      );
+      for (const m of r.rows) {
+        events.push({ type: "new_message", payload: { ...m, is_mine: m.from_id === req.userId } });
+      }
+    }
+
+    // Pesan baru di grup aktif
+    if (group_id) {
+      const mem = await pool.query("SELECT id FROM group_members WHERE group_id=$1 AND user_id=$2", [group_id, req.userId]);
+      if (mem.rows.length > 0) {
         const r = await pool.query(
-          `SELECT id,'message' as type,content,from_id,to_id,created_at FROM messages
-           WHERE ((from_id=$1 AND to_id=$2) OR (from_id=$2 AND to_id=$1)) AND created_at > $3
-           ORDER BY created_at`,
-          [req.userId, friend_id, since]
+          `SELECT gm.id,gm.content,gm.created_at,gm.from_id,u.nama as from_nama,u.avatar_warna,
+            gm.from_id=$1 as is_mine
+           FROM group_messages gm JOIN users u ON u.id=gm.from_id
+           WHERE gm.group_id=$2 AND gm.created_at > $3 AND gm.from_id!=$1
+           ORDER BY gm.created_at ASC LIMIT 50`,
+          [req.userId, group_id, since]
         );
         for (const m of r.rows) {
-          events.push({ type: "message", data: { ...m, is_mine: m.from_id === req.userId } });
-        }
-      }
-      if (group_id) {
-        const mem = await pool.query("SELECT id FROM group_members WHERE group_id=$1 AND user_id=$2", [group_id, req.userId]);
-        if (mem.rows.length > 0) {
-          const r = await pool.query(
-            `SELECT gm.id,gm.content,gm.created_at,gm.from_id,u.nama as from_nama,
-              gm.from_id=$1 as is_mine
-             FROM group_messages gm JOIN users u ON u.id=gm.from_id
-             WHERE gm.group_id=$2 AND gm.created_at > $3
-             ORDER BY gm.created_at`,
-            [req.userId, group_id, since]
-          );
-          for (const m of r.rows) {
-            events.push({ type: "group_message", data: m });
-          }
+          events.push({ type: "group_message", payload: { ...m, is_mine: false } });
         }
       }
     }
 
-    // Update online status
-    await pool.query("UPDATE users SET is_online=true,last_seen=NOW() WHERE id=$1", [req.userId]);
-    res.json({ events });
-  } catch { res.json({ events: [] }); }
+    // Permintaan pertemanan baru
+    const reqR = await pool.query(
+      `SELECT fr.id,fr.dari_id,u.nama as dari_nama,u.avatar_warna as dari_avatar_warna
+       FROM friend_requests fr JOIN users u ON u.id=fr.dari_id
+       WHERE fr.ke_id=$1 AND fr.status='pending' AND fr.created_at > $2`,
+      [req.userId, since]
+    );
+    for (const r of reqR.rows) {
+      events.push({ type: "friend_request", payload: r });
+    }
+
+    // Pesan belum dibaca dari teman lain (notif unread)
+    const unreadR = await pool.query(
+      `SELECT DISTINCT from_id FROM messages
+       WHERE to_id=$1 AND created_at > $2 AND from_id!=$3
+       ORDER BY from_id`,
+      [req.userId, since, friend_id ?? 0]
+    );
+    for (const u of unreadR.rows) {
+      events.push({ type: "unread_message", payload: { from_user_id: u.from_id } });
+    }
+
+    // Update lokasi semua teman (selalu kirim, bukan hanya yang berubah)
+    const locR = await pool.query(
+      `SELECT u.id,u.nama,u.avatar_warna,u.is_online,u.last_seen,l.lat,l.lng,l.updated_at
+       FROM friends f JOIN users u ON u.id=f.friend_id
+       LEFT JOIN locations l ON l.user_id=f.friend_id
+       WHERE f.user_id=$1`,
+      [req.userId]
+    );
+    for (const l of locR.rows) {
+      if (l.lat && l.lng) {
+        events.push({ type: "location_update", payload: {
+          user_id: l.id, nama: l.nama, avatar_warna: l.avatar_warna,
+          lat: l.lat, lng: l.lng, is_online: l.is_online,
+        }});
+      } else {
+        events.push({ type: "user_status", payload: {
+          user_id: l.id, is_online: l.is_online,
+        }});
+      }
+    }
+
+    res.json({ events, timestamp: new Date().toISOString() });
+  } catch { res.json({ events: [], timestamp: new Date().toISOString() }); }
 });
 
 // ── Admin: cek maintenance (publik) ──────────────────────────────────────────

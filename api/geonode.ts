@@ -231,12 +231,27 @@ export const addGroupMember = (group_id: number, kode: string) =>
 export const getGroupMaps = (group_id: number) =>
   request<Friend[]>(`/api/groups/${group_id}/maps`).catch(() => [] as Friend[]);
 
+// User profile
+export const getUserById = (userId: number) =>
+  request<User & { is_online?: boolean; last_seen?: string }>(`/api/users/${userId}`);
+
+export const updateProfile = (nama: string, avatar_warna?: string) =>
+  request<User>("/api/auth/update", {
+    method: "PATCH",
+    body: JSON.stringify({ nama, avatar_warna }),
+  });
+
 // Polling events
+export interface PollingEvent {
+  type: "new_message" | "group_message" | "friend_request" | "unread_message" | "location_update" | "user_status";
+  payload: any;
+}
+
 export const pollEvents = (since: string, friend_id?: number, group_id?: number) => {
   let url = `/api/ws?since=${encodeURIComponent(since)}&_t=${Date.now()}`;
   if (friend_id) url += `&friend_id=${friend_id}`;
   if (group_id) url += `&group_id=${group_id}`;
-  return request<{ events: unknown[] }>(url).catch(() => ({ events: [] }));
+  return request<{ events: PollingEvent[]; timestamp: string }>(url).catch(() => ({ events: [] as PollingEvent[], timestamp: new Date().toISOString() }));
 };
 
 // Keys (E2E encryption)
