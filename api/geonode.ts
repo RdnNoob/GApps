@@ -1,4 +1,38 @@
-const BASE_URL = "gapps-production.up.railway.app";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const DEFAULT_URL = "https://gapps-production.up.railway.app";
+const SERVER_URL_KEY = "gl_server_url";
+
+let cachedBaseUrl: string = DEFAULT_URL;
+
+export async function loadServerUrl(): Promise<string> {
+  try {
+    const stored = await AsyncStorage.getItem(SERVER_URL_KEY);
+    if (stored && stored.trim()) {
+      cachedBaseUrl = stored.trim();
+    } else {
+      cachedBaseUrl = DEFAULT_URL;
+    }
+  } catch {
+    cachedBaseUrl = DEFAULT_URL;
+  }
+  return cachedBaseUrl;
+}
+
+export function getServerUrl(): string {
+  return cachedBaseUrl;
+}
+
+export async function saveServerUrl(url: string): Promise<void> {
+  const cleaned = url.trim().replace(/\/$/, "");
+  await AsyncStorage.setItem(SERVER_URL_KEY, cleaned);
+  cachedBaseUrl = cleaned;
+}
+
+export async function resetServerUrl(): Promise<void> {
+  await AsyncStorage.removeItem(SERVER_URL_KEY);
+  cachedBaseUrl = DEFAULT_URL;
+}
 
 let authToken: string | null = null;
 
@@ -14,6 +48,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const BASE_URL = cachedBaseUrl;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
@@ -37,6 +72,7 @@ async function adminRequest<T>(
   adminToken: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const BASE_URL = cachedBaseUrl;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "Authorization": `Bearer ${adminToken}`,
@@ -119,11 +155,8 @@ export interface GroupMapMember {
 export interface AdminStats {
   total_pengguna: number;
   pengguna_online: number;
-  total_pertemanan: number;
+  total_grup: number;
   total_pesan: number;
-  pendaftaran_hari_ini: number;
-  recent_users: AdminUser[];
-  recent_logs: ActivityLog[];
 }
 
 export interface AdminUser {
@@ -131,26 +164,21 @@ export interface AdminUser {
   nama: string;
   email: string;
   kode: string;
-  avatar_warna?: string;
-  is_online?: boolean;
-  last_seen?: string;
+  is_online: boolean;
+  last_seen: string;
   created_at: string;
 }
 
-export interface ActivityLog {
-  id: number;
-  user_id: number;
-  aksi: string;
-  detail?: string;
-  nama?: string;
-  created_at: string;
+export interface PollingEvent {
+  type: string;
+  data: unknown;
 }
 
 // Auth
-export const login = (kode_atau_email: string, password: string) =>
+export const login = (kode: string, password: string) =>
   request<{ token: string; user: User }>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ kode_atau_email, password }),
+    body: JSON.stringify({ kode, password }),
   });
 
 export const register = (nama: string, email: string, password: string) =>
@@ -159,57 +187,48 @@ export const register = (nama: string, email: string, password: string) =>
     body: JSON.stringify({ nama, email, password }),
   });
 
-export const getMe = () => request<User>("/api/auth/me");
-
 export const logout = () =>
   request<{ message: string }>("/api/auth/logout", { method: "POST" });
 
-// Maintenance
-export const checkMaintenance = () =>
-  fetch(`${BASE_URL}/api/admin/check-maintenance`)
-    .then(r => r.json())
-    .catch(() => ({ maintenance: false }));
+export const getMe = () => request<User>("/api/auth/me");
 
 // Friends
 export const getFriends = () => request<Friend[]>("/api/friends");
 
 export const addFriend = (kode: string) =>
-  request<{ message: string }>("/api/friends", {
+  request<{ message: string }>("/api/friends/request", {
     method: "POST",
     body: JSON.stringify({ kode }),
   });
 
+export const acceptFriend = (requestId: number) =>
+  request<{ message: string }>(`/api/friends/request/${requestId}/accept`, {
+    method: "POST",
+  });
+
+export const rejectFriend = (requestId: number) =>
+  request<{ message: string }>(`/api/friends/request/${requestId}/reject`, {
+    method: "POST",
+  });
+
 export const getFriendRequests = () =>
-  request<FriendRequest[]>("/api/friends/requests").catch(() => [] as FriendRequest[]);
+  request<FriendRequest[]>("/api/friends/requests");
 
-export const acceptFriend = (id: number) =>
-  request<{ message: string }>(`/api/friends/requests/${id}/accept`, {
-    method: "POST",
+export const removeFriend = (friendId: number) =>
+  request<{ message: string }>(`/api/friends/${friendId}`, {
+    method: "DELETE",
   });
 
-export const rejectFriend = (id: number) =>
-  request<{ message: string }>(`/api/friends/requests/${id}/reject`, {
+// Messages
+export const getMessages = (friendId: number, before?: number) => {
+  const url = `/api/messages/${friendId}${before ? `?before=${before}` : ""}`;
+  return request<Message[]>(url);
+};
+
+export const sendMessage = (toId: number, content: string) =>
+  request<Message>("/api/messages", {
     method: "POST",
-  });
-
-// Location
-export const updateLocation = (lat: number, lng: number) =>
-  request<{ message: string }>("/api/location/update", {
-    method: "POST",
-    body: JSON.stringify({ lat, lng }),
-  });
-
-export const getFriendLocations = () =>
-  request<Friend[]>("/api/location/friends").catch(() => [] as Friend[]);
-
-// Chat
-export const getChatMessages = (friend_id: number) =>
-  request<Message[]>(`/api/chat/messages?friend_id=${friend_id}`);
-
-export const sendMessage = (friend_id: number, content: string) =>
-  request<Message>("/api/chat/messages", {
-    method: "POST",
-    body: JSON.stringify({ friend_id, content }),
+    body: JSON.stringify({ to_id: toId, content }),
   });
 
 // Groups
@@ -221,87 +240,42 @@ export const createGroup = (nama: string) =>
     body: JSON.stringify({ nama }),
   });
 
-export const getGroupMessages = (group_id: number) =>
-  request<Message[]>(`/api/groups/${group_id}/messages`);
-
-export const sendGroupMessage = (group_id: number, content: string) =>
-  request<Message>(`/api/groups/${group_id}/messages`, {
-    method: "POST",
-    body: JSON.stringify({ content }),
-  });
-
-export const getGroupMembers = (group_id: number) =>
-  request<GroupMember[]>(`/api/groups/${group_id}/members`);
-
-export const addGroupMember = (group_id: number, kode: string) =>
-  request<{ message: string }>(`/api/groups/${group_id}/members`, {
+export const joinGroup = (kode: string) =>
+  request<{ message: string }>("/api/groups/join", {
     method: "POST",
     body: JSON.stringify({ kode }),
   });
 
-export const getGroupMap = (group_id: number) =>
-  request<GroupMapMember[]>(`/api/groups/${group_id}/maps`);
+export const getGroupMembers = (groupId: number) =>
+  request<GroupMember[]>(`/api/groups/${groupId}/members`);
 
-export const deleteGroup = (group_id: number) =>
-  request<{ message: string }>(`/api/groups/${group_id}`, { method: "DELETE" });
+export const getGroupMapMembers = (groupId: number) =>
+  request<GroupMapMember[]>(`/api/groups/${groupId}/map`);
 
-export const renameGroup = (group_id: number, nama: string) =>
-  request<{ message: string }>(`/api/groups/${group_id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ nama }),
-  });
-
-export const kickMember = (group_id: number, userId: number) =>
-  request<{ message: string }>(`/api/groups/${group_id}/members/${userId}`, { method: "DELETE" });
-
-export const changeMemberRole = (group_id: number, userId: number, role: "admin" | "member") =>
-  request<{ message: string }>(`/api/groups/${group_id}/members/${userId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ role }),
-  });
-
-export const deleteMessage = (messageId: number) =>
-  request<{ message: string }>(`/api/chat/messages/${messageId}`, { method: "DELETE" });
-
-export const deleteGroupMessage = (group_id: number, messageId: number) =>
-  request<{ message: string }>(`/api/groups/${group_id}/messages/${messageId}`, { method: "DELETE" });
-
-export const deleteFriend = (friendId: number) =>
-  request<{ message: string }>(`/api/friends/${friendId}`, { method: "DELETE" });
-
-export const savePushToken = (token: string) =>
-  request<{ message: string }>("/api/notifications/token", {
+export const leaveGroup = (groupId: number) =>
+  request<{ message: string }>(`/api/groups/${groupId}/leave`, {
     method: "POST",
-    body: JSON.stringify({ token }),
   });
 
-export const deletePushToken = (token: string) =>
-  request<{ message: string }>("/api/notifications/token", {
-    method: "DELETE",
-    body: JSON.stringify({ token }),
+// Location
+export const updateLocation = (lat: number, lng: number) =>
+  request<{ message: string }>("/api/location", {
+    method: "POST",
+    body: JSON.stringify({ lat, lng }),
   });
 
-// User profile
-export const getUserById = (userId: number) =>
-  request<User & { is_online?: boolean; last_seen?: string }>(`/api/users/${userId}`);
+// Maintenance
+export const checkMaintenance = () =>
+  request<{ maintenance: boolean }>("/api/maintenance");
 
-export const updateProfile = (nama: string, avatar_warna?: string) =>
-  request<User>("/api/auth/update", {
-    method: "PATCH",
-    body: JSON.stringify({ nama, avatar_warna }),
-  });
-
-// Polling events
-export interface PollingEvent {
-  type: "new_message" | "group_message" | "friend_request" | "unread_message" | "location_update" | "user_status";
-  payload: any;
-}
-
-export const pollEvents = (since: string, friend_id?: number, group_id?: number) => {
-  let url = `/api/ws?since=${encodeURIComponent(since)}&_t=${Date.now()}`;
-  if (friend_id) url += `&friend_id=${friend_id}`;
-  if (group_id) url += `&group_id=${group_id}`;
-  return request<{ events: PollingEvent[]; timestamp: string }>(url).catch(() => ({ events: [] as PollingEvent[], timestamp: new Date().toISOString() }));
+// Polling
+export const pollEvents = (lastTimestamp?: string) => {
+  const url = lastTimestamp
+    ? `/api/poll?since=${encodeURIComponent(lastTimestamp)}`
+    : "/api/poll";
+  return request<{ events: PollingEvent[]; timestamp: string }>(url).catch(
+    () => ({ events: [] as PollingEvent[], timestamp: new Date().toISOString() })
+  );
 };
 
 // Keys (E2E encryption)
@@ -316,12 +290,15 @@ export const getPublicKey = (userId: number) =>
 
 // Admin
 export const adminLogin = (username: string, kata_sandi: string) =>
-  fetch(`${BASE_URL}/api/admin/login`, {
+  fetch(`${cachedBaseUrl}/api/admin/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, kata_sandi }),
-  }).then(r => {
-    if (!r.ok) return r.json().then(d => Promise.reject(new Error(d.error || "Login gagal")));
+  }).then((r) => {
+    if (!r.ok)
+      return r.json().then((d) =>
+        Promise.reject(new Error((d as { error?: string }).error || "Login gagal"))
+      );
     return r.json() as Promise<{ token: string; username: string }>;
   });
 
@@ -332,15 +309,18 @@ export const adminGetUsers = (adminToken: string) =>
   adminRequest<AdminUser[]>("/api/admin/users", adminToken);
 
 export const adminToggleMaintenance = (adminToken: string, aktif: boolean) =>
-  adminRequest<{ maintenance: boolean; message: string }>("/api/admin/maintenance", adminToken, {
-    method: "POST",
-    body: JSON.stringify({ aktif }),
-  });
+  adminRequest<{ maintenance: boolean; message: string }>(
+    "/api/admin/maintenance",
+    adminToken,
+    { method: "POST", body: JSON.stringify({ aktif }) }
+  );
 
 export const adminForceLogout = (adminToken: string, userId: number) =>
-  adminRequest<{ message: string }>(`/api/admin/force-logout/${userId}`, adminToken, {
-    method: "POST",
-  });
+  adminRequest<{ message: string }>(
+    `/api/admin/force-logout/${userId}`,
+    adminToken,
+    { method: "POST" }
+  );
 
 export const adminDeleteUser = (adminToken: string, userId: number) =>
   adminRequest<{ message: string }>(`/api/admin/users/${userId}`, adminToken, {
