@@ -5,11 +5,20 @@ const SERVER_URL_KEY = "gl_server_url";
 
 let cachedBaseUrl: string = DEFAULT_URL;
 
+function ensureProtocol(url: string): string {
+  const trimmed = url.trim().replace(/\/$/, "");
+  if (!trimmed) return DEFAULT_URL;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return "https://" + trimmed;
+}
+
 export async function loadServerUrl(): Promise<string> {
   try {
     const stored = await AsyncStorage.getItem(SERVER_URL_KEY);
     if (stored && stored.trim()) {
-      cachedBaseUrl = stored.trim();
+      cachedBaseUrl = ensureProtocol(stored);
     } else {
       cachedBaseUrl = DEFAULT_URL;
     }
@@ -24,7 +33,7 @@ export function getServerUrl(): string {
 }
 
 export async function saveServerUrl(url: string): Promise<void> {
-  const cleaned = url.trim().replace(/\/$/, "");
+  const cleaned = ensureProtocol(url);
   await AsyncStorage.setItem(SERVER_URL_KEY, cleaned);
   cachedBaseUrl = cleaned;
 }
