@@ -10,13 +10,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
 } from "react-native";
-import { getServerUrl, saveServerUrl, resetServerUrl, loadServerUrl } from "@/api/geonode";
+import { getServerUrl, saveServerUrl, resetServerUrl } from "@/api/geonode";
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved?: () => void;
+}
+
+function ensureProtocol(url: string): string {
+  const trimmed = url.trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  return "https://" + trimmed;
 }
 
 export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
@@ -33,14 +43,16 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
   }, [visible]);
 
   const handleTest = async () => {
-    const trimmed = url.trim().replace(/\/$/, "");
-    if (!trimmed) return;
+    const fixed = ensureProtocol(url);
+    if (!fixed) return;
+    // Update input to show the fixed URL with protocol
+    setUrl(fixed);
     setIsTesting(true);
     setTestResult(null);
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(`${trimmed}/api/healthz`, { signal: controller.signal });
+      const res = await fetch(`${fixed}/api/healthz`, { signal: controller.signal });
       clearTimeout(timer);
       if (res.ok) {
         setTestResult({ ok: true, message: "Koneksi berhasil" });
@@ -59,15 +71,15 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
   };
 
   const handleSave = async () => {
-    const trimmed = url.trim().replace(/\/$/, "");
-    if (!trimmed) {
+    const fixed = ensureProtocol(url);
+    if (!fixed) {
       Alert.alert("URL Kosong", "Masukkan URL server terlebih dahulu.");
       return;
     }
+    setUrl(fixed);
     setIsSaving(true);
     try {
-      await saveServerUrl(trimmed);
-      await loadServerUrl();
+      await saveServerUrl(fixed);
       onSaved?.();
       onClose();
     } catch {
@@ -88,7 +100,6 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
           style: "destructive",
           onPress: async () => {
             await resetServerUrl();
-            await loadServerUrl();
             setUrl(getServerUrl());
             setTestResult(null);
             onSaved?.();
@@ -106,36 +117,52 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
       >
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerLeft}>
             <Text style={styles.title}>Konfigurasi Server</Text>
             <Text style={styles.subtitle}>Ubah URL server yang digunakan aplikasi</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.closeBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Text style={styles.closeText}>Tutup</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.body}>
+        <ScrollView
+          style={styles.body}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.bodyContent}
+        >
           <Text style={styles.label}>URL SERVER</Text>
           <TextInput
             style={styles.input}
             value={url}
-            onChangeText={(t) => { setUrl(t); setTestResult(null); }}
-            placeholder="https://contoh-server.up.railway.app"
+            onChangeText={(t) => {
+              setUrl(t);
+              setTestResult(null);
+            }}
+            placeholder="contoh-server.up.railway.app"
             placeholderTextColor="#475569"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
           />
+          <Text style={styles.hint}>
+            Tidak perlu mengetik https:// — akan ditambahkan otomatis.
+          </Text>
 
-          {testResult && (
+          {testResult !== null && (
             <View style={[styles.testBadge, testResult.ok ? styles.testOk : styles.testFail]}>
               <View style={[styles.dot, testResult.ok ? styles.dotOk : styles.dotFail]} />
-              <Text style={[styles.testText, testResult.ok ? styles.testTextOk : styles.testTextFail]}>
+              <Text
+                style={[styles.testText, testResult.ok ? styles.testTextOk : styles.testTextFail]}
+              >
                 {testResult.message}
               </Text>
             </View>
@@ -143,7 +170,7 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
 
           <View style={styles.actions}>
             <TouchableOpacity
-              style={[styles.btn, styles.btnSecondary]}
+              style={[styles.btn, styles.btnSecondary, (!url.trim() || isTesting) && styles.btnDisabled]}
               onPress={handleTest}
               disabled={isTesting || !url.trim()}
             >
@@ -155,7 +182,7 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.btn, styles.btnPrimary, (isSaving || !url.trim()) && styles.btnDisabled]}
+              style={[styles.btn, styles.btnPrimary, (!url.trim() || isSaving) && styles.btnDisabled]}
               onPress={handleSave}
               disabled={isSaving || !url.trim()}
             >
@@ -172,11 +199,13 @@ export function ServerConfigModal({ visible, onClose, onSaved }: Props) {
           </TouchableOpacity>
 
           <View style={styles.infoBox}>
+            <Text style={styles.infoTitle}>URL saat ini:</Text>
+            <Text style={styles.infoUrl}>{getServerUrl()}</Text>
             <Text style={styles.infoText}>
               URL yang disimpan akan digunakan di semua sesi. Pastikan URL sudah benar sebelum menyimpan.
             </Text>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -197,6 +226,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#1e293b",
   },
+  headerLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
   title: {
     fontSize: 18,
     fontWeight: "700",
@@ -208,10 +241,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     backgroundColor: "#1e293b",
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#334155",
   },
   closeText: {
     fontSize: 14,
@@ -220,7 +255,10 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+  },
+  bodyContent: {
     padding: 20,
+    paddingBottom: 40,
   },
   label: {
     fontSize: 11,
@@ -240,15 +278,21 @@ const styles = StyleSheet.create({
     color: "#f1f5f9",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
+  hint: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 6,
+    marginBottom: 2,
+  },
   testBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginTop: 10,
+    marginTop: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 8,
     borderWidth: 1,
+    gap: 8,
   },
   testOk: {
     backgroundColor: "rgba(16,185,129,0.1)",
@@ -262,10 +306,11 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
+    flexShrink: 0,
   },
   dotOk: { backgroundColor: "#10b981" },
   dotFail: { backgroundColor: "#ef4444" },
-  testText: { fontSize: 13, fontWeight: "500" },
+  testText: { fontSize: 13, fontWeight: "500", flexShrink: 1 },
   testTextOk: { color: "#10b981" },
   testTextFail: { color: "#ef4444" },
   actions: {
@@ -275,10 +320,11 @@ const styles = StyleSheet.create({
   },
   btn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 46,
   },
   btnPrimary: {
     backgroundColor: "#3b82f6",
@@ -299,10 +345,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   btnDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   resetBtn: {
-    marginTop: 14,
+    marginTop: 16,
     alignItems: "center",
     paddingVertical: 10,
   },
@@ -315,10 +361,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#1e293b",
     borderRadius: 10,
     padding: 14,
+    gap: 6,
+  },
+  infoTitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748b",
+    letterSpacing: 0.5,
+  },
+  infoUrl: {
+    fontSize: 13,
+    color: "#94a3b8",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   infoText: {
-    fontSize: 13,
-    color: "#64748b",
+    fontSize: 12,
+    color: "#475569",
     lineHeight: 18,
+    marginTop: 4,
   },
 });
