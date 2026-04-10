@@ -6,7 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, router } from "expo-router";
+import { Stack, router, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
@@ -66,15 +66,13 @@ function RootLayoutNav({ onOpenConfig }: { onOpenConfig: () => void }) {
       const reachable = await isServerReachable();
 
       if (!reachable) {
-        // Server tidak bisa dijangkau — tetap arahkan ke halaman yang sesuai
-        // lalu langsung buka panel konfigurasi
-        router.replace(user ? "/(tabs)" : "/login");
+        router.replace(user ? "/(tabs)" : "/welcome");
         onOpenConfig();
         return;
       }
 
       if (!user) {
-        router.replace("/login");
+        router.replace("/welcome");
         return;
       }
 
@@ -82,7 +80,6 @@ function RootLayoutNav({ onOpenConfig }: { onOpenConfig: () => void }) {
         const { maintenance } = await checkMaintenance();
         router.replace(maintenance ? "/maintenance" : "/(tabs)");
       } catch {
-        // maintenance check gagal tapi server bisa dijangkau
         router.replace("/(tabs)");
       }
     };
@@ -93,7 +90,8 @@ function RootLayoutNav({ onOpenConfig }: { onOpenConfig: () => void }) {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#0f172a" } }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="login" options={{ headerShown: false, animation: "fade" }} />
+      <Stack.Screen name="welcome" options={{ headerShown: false, animation: "fade" }} />
+      <Stack.Screen name="login" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="register" options={{ headerShown: false, animation: "slide_from_right" }} />
       <Stack.Screen name="admin-login" options={{ headerShown: false, animation: "slide_from_bottom" }} />
       <Stack.Screen name="admin" options={{ headerShown: false, animation: "slide_from_bottom" }} />
@@ -102,6 +100,16 @@ function RootLayoutNav({ onOpenConfig }: { onOpenConfig: () => void }) {
       <Stack.Screen name="group/[groupId]" options={{ headerShown: false, animation: "slide_from_right" }} />
     </Stack>
   );
+}
+
+function ConfigButtonGuard({ onPress }: { onPress: () => void }) {
+  const segments = useSegments();
+  const isOnTabs = segments[0] === "(tabs)";
+  const isOnChat = segments[0] === "chat";
+  const isOnGroup = segments[0] === "group";
+
+  if (isOnTabs || isOnChat || isOnGroup) return null;
+  return <ConfigButton onPress={onPress} />;
 }
 
 export default function RootLayout() {
@@ -141,7 +149,7 @@ export default function RootLayout() {
                     <LocationProvider>
                       <View style={{ flex: 1 }}>
                         <RootLayoutNav onOpenConfig={openConfig} />
-                        <ConfigButton onPress={openConfig} />
+                        <ConfigButtonGuard onPress={openConfig} />
                         <ServerConfigModal
                           visible={configVisible}
                           onClose={closeConfig}
