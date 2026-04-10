@@ -1,4 +1,4 @@
-const BASE_URL = "https://gapps-backend.up.railway.app";
+const BASE_URL = "gapps-production.up.railway.app";
 
 let authToken: string | null = null;
 
