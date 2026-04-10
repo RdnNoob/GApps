@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import { Pool } from "pg";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8081;
 const JWT_SECRET = process.env.JWT_SECRET || "geonode-secret";
 const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "geonode-admin-secret";
 
