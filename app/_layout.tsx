@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -20,7 +20,7 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { LocationProvider } from "@/context/LocationContext";
 import { NotificationProvider } from "@/context/NotificationContext";
-import { checkMaintenance, loadServerUrl } from "@/api/geonode";
+import { checkMaintenance, loadServerUrl, getServerUrl } from "@/api/geonode";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,37 +39,56 @@ function ConfigButton({ onPress }: { onPress: () => void }) {
   );
 }
 
+async function isServerReachable(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`${getServerUrl()}/api/healthz`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    return res.ok || res.status < 500;
+  } catch {
+    return false;
+  }
+}
+
 function RootLayoutNav({ onOpenConfig }: { onOpenConfig: () => void }) {
   const { user, loading } = useAuth();
-  const [connectionFailed, setConnectionFailed] = useState(false);
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
-    if (!loading) {
+    if (loading || hasNavigated.current) return;
+
+    hasNavigated.current = true;
+
+    const navigate = async () => {
+      const reachable = await isServerReachable();
+
+      if (!reachable) {
+        // Server tidak bisa dijangkau — tetap arahkan ke halaman yang sesuai
+        // lalu langsung buka panel konfigurasi
+        router.replace(user ? "/(tabs)" : "/login");
+        onOpenConfig();
+        return;
+      }
+
       if (!user) {
         router.replace("/login");
-      } else {
-        checkMaintenance()
-          .then(({ maintenance }) => {
-            if (maintenance) {
-              router.replace("/maintenance");
-            } else {
-              router.replace("/(tabs)");
-            }
-          })
-          .catch(() => {
-            setConnectionFailed(true);
-            router.replace("/login");
-          });
+        return;
       }
-    }
-  }, [user, loading]);
 
-  useEffect(() => {
-    if (connectionFailed) {
-      onOpenConfig();
-      setConnectionFailed(false);
-    }
-  }, [connectionFailed, onOpenConfig]);
+      try {
+        const { maintenance } = await checkMaintenance();
+        router.replace(maintenance ? "/maintenance" : "/(tabs)");
+      } catch {
+        // maintenance check gagal tapi server bisa dijangkau
+        router.replace("/(tabs)");
+      }
+    };
+
+    navigate();
+  }, [loading, user, onOpenConfig]);
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#0f172a" } }}>
